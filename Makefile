@@ -2,9 +2,9 @@ SHELL = /bin/bash
 OS = $(shell uname -s)
 
 # Project variables
-PACKAGE = github.com/martonsereg/scheduler
+PACKAGE = github.com/mospany/random-scheduler
 BINARY_NAME = scheduler
-IMAGE = martonsereg/scheduler
+IMAGE = mospany/random-scheduler
 TAG = v0.3
 
 # Build variables

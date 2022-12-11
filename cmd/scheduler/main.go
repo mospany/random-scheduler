@@ -6,16 +6,17 @@ import (
 	"math/rand"
 	"time"
 
+	"context"
+	"errors"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	listersv1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/apimachinery/pkg/util/wait"
-	"errors"
 )
 
 const schedulerName = "random-scheduler"
@@ -108,6 +109,7 @@ func (s *Scheduler) Run(quit chan struct{}) {
 }
 
 func (s *Scheduler) ScheduleOne() {
+	ctx := context.TODO()
 
 	p := <-s.podQueue
 	fmt.Println("found a pod to schedule:", p.Namespace, "/", p.Name)
@@ -118,7 +120,7 @@ func (s *Scheduler) ScheduleOne() {
 		return
 	}
 
-	err = s.bindPod(p, node)
+	err = s.bindPod(ctx, p, node)
 	if err != nil {
 		log.Println("failed to bind pod", err.Error())
 		return
@@ -126,7 +128,7 @@ func (s *Scheduler) ScheduleOne() {
 
 	message := fmt.Sprintf("Placed pod [%s/%s] on %s\n", p.Namespace, p.Name, node)
 
-	err = s.emitEvent(p, message)
+	err = s.emitEvent(ctx, p, message)
 	if err != nil {
 		log.Println("failed to emit scheduled event", err.Error())
 		return
@@ -149,8 +151,9 @@ func (s *Scheduler) findFit(pod *v1.Pod) (string, error) {
 	return s.findBestNode(priorities), nil
 }
 
-func (s *Scheduler) bindPod(p *v1.Pod, node string) error {
-	return s.clientset.CoreV1().Pods(p.Namespace).Bind(&v1.Binding{
+func (s *Scheduler) bindPod(ctx context.Context, p *v1.Pod, node string) error {
+	opts := metav1.CreateOptions{}
+	return s.clientset.CoreV1().Pods(p.Namespace).Bind(ctx, &v1.Binding{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      p.Name,
 			Namespace: p.Namespace,
@@ -160,12 +163,13 @@ func (s *Scheduler) bindPod(p *v1.Pod, node string) error {
 			Kind:       "Node",
 			Name:       node,
 		},
-	})
+	}, opts)
 }
 
-func (s *Scheduler) emitEvent(p *v1.Pod, message string) error {
+func (s *Scheduler) emitEvent(ctx context.Context, p *v1.Pod, message string) error {
 	timestamp := time.Now().UTC()
-	_, err := s.clientset.CoreV1().Events(p.Namespace).Create(&v1.Event{
+	opts := metav1.CreateOptions{}
+	_, err := s.clientset.CoreV1().Events(p.Namespace).Create(ctx, &v1.Event{
 		Count:          1,
 		Message:        message,
 		Reason:         "Scheduled",
@@ -184,7 +188,7 @@ func (s *Scheduler) emitEvent(p *v1.Pod, message string) error {
 		ObjectMeta: metav1.ObjectMeta{
 			GenerateName: p.Name + "-",
 		},
-	})
+	}, opts)
 	if err != nil {
 		return err
 	}
