@@ -14,8 +14,11 @@ spec:
       labels:
         app: random-scheduler
     spec:
+      #由于阿里云上自己搭建的集群跨节点通信不通, 否则报dial tcp 10.96.0.1:443: i/o timeout
+      nodeSelector:
+        role: master 
       serviceAccount: random-scheduler
       containers:
         - name: random-scheduler
-          image: mospany/scheduler:v0.3
+          image: mospany/random-scheduler:v0.3
           imagePullPolicy: Always
